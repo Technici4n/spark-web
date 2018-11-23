@@ -1,4 +1,6 @@
+let baseData;
 let activeData;
+let mapping = "none";
 
 const $stack = $("#stack");
 const $overlay = $("#overlay");
@@ -15,7 +17,7 @@ function loadSampleData(data) {
     $("#mappings-selector").show();
 
     // store so we can re-use later, if remapping is applied, for example.
-    activeData = data;
+    activeData = baseData = data;
 }
 
 /**
@@ -89,7 +91,7 @@ function renderStackToHtml(root, totalTime, renderingFunction) {
             // print start
             const timePercent = ((node["totalTime"] / totalTime) * 100).toFixed(2) + "%";
             html += '<li>';
-            html += '<div class="node collapsed" data-name="' + simpleRender(node, parentNode) + '">';
+            html += '<div class="node collapsed" data-name="' + nodeId(node) + '">';
             html += '<div class="name">';
             html += renderingFunction(node, parentNode);
             const parentLineNumber = node["parentLineNumber"];
@@ -111,6 +113,15 @@ function renderStackToHtml(root, totalTime, renderingFunction) {
 
     // remove outer the <li> </li>
     return html.slice(4, -5);
+}
+
+function nodeId(node) {
+    const className = node["className"];
+    const methodName = node["methodName"];
+    if (!className || !methodName) {
+        return escapeHtml(node["name"]);
+    }
+    return escapeHtml(className) + "." + escapeHtml(methodName);
 }
 
 /**
@@ -375,6 +386,95 @@ function applyFilter(filter, element) {
     return show;
 }
 
+function showCulminateOutgoing(targetName) {
+    $sampler.hide();
+    $overlay.empty();
+    $loading.show().html("Culminating data; please wait...");
+
+    setTimeout(function() {
+        const result = culminateOutgoing(targetName, baseData);
+        activeData = {
+            threads: [{
+                rootNode: result,
+                totalTime: result.totalTime
+            }]
+        };
+        applyRemapping(mapping);
+    }, 0);
+}
+
+function culminateOutgoing(targetName, data) {
+    let nodes = [];
+    for (const thread of data["threads"]) {
+        const root = thread["rootNode"];
+
+        let stack = [root];
+        while (stack.length !== 0) {
+            const node = stack.pop();
+            if (node["children"]) {
+                for (const child of node.children) {
+                    stack.push(child);
+                }
+            }
+
+            if (nodeId(node) === targetName) {
+                nodes.push(node);
+            }
+        }
+    }
+
+    let node = {};
+    for (const other of nodes) {
+        mergeNodes(node, other);
+    }
+    return node;
+}
+
+// merge 'from' into 'base'
+function mergeNodes(base, from) {
+    const totalTime = from["totalTime"];
+    if (!base["populated"]) {
+        base.populated = true;
+        base.generatedName = nodeId(from);
+        base.className = from["className"];
+        base.methodName = from["methodName"];
+        base.name = from["name"];
+        base.totalTime = totalTime;
+    } else {
+        // merge times
+        base.totalTime = base.totalTime + totalTime;
+    }
+
+    if (from["children"]) {
+        if (!base["children"]) {
+            base.children = [];
+        }
+
+        for (const child of from["children"]) {
+            const childName = nodeId(child);
+            let match;
+            for (const other of base.children) {
+                if (other.generatedName === childName) {
+                    match = other;
+                    break;
+                }
+            }
+            if (!match) {
+                match = {};
+                base.children.push(match);
+            }
+            mergeNodes(match, child);
+        }
+        base.children.sort(function (a, b) {
+            if (a.totalTime < b.totalTime)
+                return -1;
+            if (a.totalTime > b.totalTime)
+                return 1;
+            return 0;
+        });
+    }
+}
+
 
 /*
  * Define page listeners.
@@ -517,6 +617,8 @@ contextMenu.click(function(e) {
         expandAll();
     } else if (action === "collapse-all") {
         collapseAll();
+    } else if (action === "outgoing") {
+        showCulminateOutgoing($(contextMenuTarget).attr("data-name"));
     }
 });
 // close the menu when the cursor is clicked elsewhere.
@@ -532,6 +634,7 @@ $(document).keyup(function(e) {
 
 // listen for mapping selections
 $("#mappings-selector > select").change(function(e) {
+    mapping = this.value;
     applyRemapping(this.value);
 });
 
