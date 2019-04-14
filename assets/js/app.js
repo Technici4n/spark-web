@@ -31,12 +31,18 @@ function determineType(typeName) {
                     loadHeapData(data);
                 });
             }
+        },
+        "monitoring": {
+            load: function(data) {
+                $.getScript("assets/js/types/monitoring.js", function() {
+                    loadMonitoringData(data);
+                });
+            }
         }
     }[typeName];
 }
 
-function createRemappingFunction() {
-    const newKeys = type.shorthandKeys;
+function createRemappingFunction(newKeys) {
     return function(key, value) {
         if (typeof value === "object" && !Array.isArray(value)) {
             const keyValues = Object.keys(value).map(key => {
@@ -72,9 +78,11 @@ function loadContent() {
                 $loading.html("Rendering data; please wait...");
                 // we have to parse the data twice, first without any remapping to determine the type,
                 // and then again with remapping, once we know which rules to use.
-                type = determineType(JSON.parse(raw)["type"] || "sampler");
-                const data = JSON.parse(raw, createRemappingFunction());
-
+                let data = JSON.parse(raw);
+                type = determineType(data["type"] || "sampler");
+                if (type.shorthandKeys) {
+                    data = JSON.parse(raw, createRemappingFunction(type.shorthandKeys));
+                }
                 type.load(data);
             }
         }).fail(showLoadingError);
