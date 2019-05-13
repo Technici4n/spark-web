@@ -34,8 +34,16 @@ function determineType(typeName) {
         },
         "monitoring": {
             load: function(data) {
-                $.getScript("assets/js/types/monitoring.js", function() {
-                    loadMonitoringData(data);
+                $('<link>')
+                    .appendTo('head')
+                    .attr({rel: 'stylesheet', type: 'text/css', href: 'https://cdnjs.cloudflare.com/ajax/libs/metrics-graphics/2.15.6/metricsgraphics.min.css', integrity: 'sha256-H83YjkVzXEyHSdZ/5aVRoW2QfqeJ7gIWduA7aCy9tWY=', crossorigin: 'anonymous'});
+
+                $.getScript("https://cdnjs.cloudflare.com/ajax/libs/d3/5.9.2/d3.min.js", function() {
+                    $.getScript("https://cdnjs.cloudflare.com/ajax/libs/metrics-graphics/2.15.6/metricsgraphics.min.js", function() {
+                        $.getScript("assets/js/types/monitoring.js", function() {
+                            loadMonitoringData(data);
+                        });
+                    });
                 });
             }
         }
